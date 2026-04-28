@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>EMG Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<h2>EMG Live Monitor</h2>
+<button id="connect">Connect Arduino</button>
+
+<canvas id="chart"></canvas>
+
+<script>
+let port, reader;
+
+const ctx = document.getElementById('chart').getContext('2d');
+
+const data = {
+  labels: [],
+  datasets: [{
+    label: 'EMG Signal',
+    data: [],
+  }]
+};
+
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: data,
+});
+
+document.getElementById('connect').onclick = async () => {
+  port = await navigator.serial.requestPort();
+  await port.open({ baudRate: 9600 });
+
+  const decoder = new TextDecoderStream();
+  port.readable.pipeTo(decoder.writable);
+  reader = decoder.readable.getReader();
+
+  readLoop();
+};
+
+async function readLoop() {
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+
+    const lines = value.split("\n");
+
+    lines.forEach(line => {
+      const parts = line.trim().split(",");
+
+      if (parts.length >= 1) {
+        const emg = parseFloat(parts[0]);
+
+        if (!isNaN(emg)) {
+          data.labels.push("");
+          data.datasets[0].data.push(emg);
+
+          if (data.labels.length > 50) {
+            data.labels.shift();
+            data.datasets[0].data.shift();
+          }
+
+          chart.update();
+        }
+      }
+    });
+  }
+}
+</script>
+
+</body>
+</html>
