@@ -1,74 +1,268 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>EMG Monitor</title>
+  <title>EMG Live Monitor</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 30px;
+      background: #f5f5f5;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    button {
+      padding: 10px 18px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .stat {
+      background: #f0f3f7;
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .stat h3 {
+      margin: 0;
+      font-size: 14px;
+      color: #555;
+    }
+
+    .stat p {
+      margin: 8px 0 0;
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 420px !important;
+    }
+  </style>
 </head>
+
 <body>
 
-<h2>EMG Live Monitor</h2>
-<button id="connect">Connect Arduino</button>
+  <div class="card">
+    <h1>EMG Live Monitor</h1>
+    <button id="connect">Connect Arduino</button>
+    <p id="status">Not connected</p>
+  </div>
 
-<canvas id="chart"></canvas>
+  <div class="card stats">
+    <div class="stat">
+      <h3>Live EMG</h3>
+      <p id="liveEMG">0</p>
+    </div>
 
-<script>
-let port, reader;
+    <div class="stat">
+      <h3>Calibration Peak</h3>
+      <p id="calPeak">0</p>
+    </div>
 
-const ctx = document.getElementById('chart').getContext('2d');
+    <div class="stat">
+      <h3>Current Peak</h3>
+      <p id="currentPeak">0</p>
+    </div>
 
-const data = {
-  labels: [],
-  datasets: [{
-    label: 'EMG Signal',
-    data: [],
-  }]
-};
+    <div class="stat">
+      <h3>Match</h3>
+      <p><span id="matchPercent">0</span>%</p>
+    </div>
+  </div>
 
-const chart = new Chart(ctx, {
-  type: 'line',
-  data: data,
-});
+  <div class="card">
+    <h2>Live EMG Signal</h2>
+    <canvas id="emgChart"></canvas>
+  </div>
 
-document.getElementById('connect').onclick = async () => {
-  port = await navigator.serial.requestPort();
-  await port.open({ baudRate: 9600 });
+  <script>
+    let port;
+    let reader;
+    let buffer = "";
 
-  const decoder = new TextDecoderStream();
-  port.readable.pipeTo(decoder.writable);
-  reader = decoder.readable.getReader();
+    const maxPoints = 100;
 
-  readLoop();
-};
+    const labels = [];
+    const emgData = [];
+    const calPeakData = [];
+    const currentPeakData = [];
 
-async function readLoop() {
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
+    const ctx = document.getElementById("emgChart").getContext("2d");
 
-    const lines = value.split("\n");
-
-    lines.forEach(line => {
-      const parts = line.trim().split(",");
-
-      if (parts.length >= 1) {
-        const emg = parseFloat(parts[0]);
-
-        if (!isNaN(emg)) {
-          data.labels.push("");
-          data.datasets[0].data.push(emg);
-
-          if (data.labels.length > 50) {
-            data.labels.shift();
-            data.datasets[0].data.shift();
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "Live EMG",
+            data: emgData,
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.25
+          },
+          {
+            label: "Calibration Peak",
+            data: calPeakData,
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.25
+          },
+          {
+            label: "Current Peak",
+            data: currentPeakData,
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.25
           }
-
-          chart.update();
+        ]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            suggestedMax: 1023
+          },
+          x: {
+            ticks: {
+              display: false
+            }
+          }
         }
       }
     });
-  }
-}
-</script>
+
+    document.getElementById("connect").onclick = async function () {
+      try {
+        if (!("serial" in navigator)) {
+          alert("Web Serial is not supported. Use Chrome or Edge.");
+          return;
+        }
+
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+
+        document.getElementById("status").innerText = "Connected";
+
+        const decoder = new TextDecoderStream();
+        port.readable.pipeTo(decoder.writable);
+        reader = decoder.readable.getReader();
+
+        readSerial();
+
+      } catch (error) {
+        console.error(error);
+        alert("Connection failed: " + error);
+      }
+    };
+
+    async function readSerial() {
+      while (true) {
+        const { value, done } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        if (value) {
+          buffer += value;
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+
+          for (let line of lines) {
+            processLine(line.trim());
+          }
+        }
+      }
+    }
+
+    function processLine(line) {
+      if (line.length === 0) {
+        return;
+      }
+
+      const parts = line.split(",");
+      const type = parts[0];
+
+      if (type === "EMG") {
+        const emg = parseFloat(parts[1]);
+
+        if (!isNaN(emg)) {
+          document.getElementById("liveEMG").innerText = emg.toFixed(0);
+          addPoint(emg, null, null);
+        }
+      }
+
+      if (type === "CAL") {
+        const repPeak = parseFloat(parts[1]);
+        const avgCalPeak = parseFloat(parts[2]);
+        const repCount = parseInt(parts[3]);
+
+        if (!isNaN(avgCalPeak)) {
+          document.getElementById("calPeak").innerText = avgCalPeak.toFixed(0);
+          addPoint(null, avgCalPeak, null);
+        }
+      }
+
+      if (type === "RESULT") {
+        const currentPeak = parseFloat(parts[1]);
+        const calPeak = parseFloat(parts[2]);
+        const percent = parseFloat(parts[3]);
+
+        if (!isNaN(currentPeak)) {
+          document.getElementById("currentPeak").innerText = currentPeak.toFixed(0);
+        }
+
+        if (!isNaN(calPeak)) {
+          document.getElementById("calPeak").innerText = calPeak.toFixed(0);
+        }
+
+        if (!isNaN(percent)) {
+          document.getElementById("matchPercent").innerText = percent.toFixed(0);
+        }
+
+        addPoint(null, calPeak, currentPeak);
+      }
+    }
+
+    function addPoint(emg, calPeak, currentPeak) {
+      labels.push("");
+
+      emgData.push(emg);
+      calPeakData.push(calPeak);
+      currentPeakData.push(currentPeak);
+
+      if (labels.length > maxPoints) {
+        labels.shift();
+        emgData.shift();
+        calPeakData.shift();
+        currentPeakData.shift();
+      }
+
+      chart.update();
+    }
+  </script>
 
 </body>
 </html>
