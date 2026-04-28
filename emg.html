@@ -99,19 +99,19 @@
     let reader;
     let buffer = "";
 
-    const maxPoints = 100;
+    let startTime = null;
+    const liveWindowSeconds = 5;
 
-    const labels = [];
-    const emgData = [];
-    const calPeakData = [];
-    const currentPeakData = [];
+    let latestCalPeak = 0;
+    let latestCurrentPeak = 0;
+
+    let emgData = [];
 
     const ctx = document.getElementById("emgChart").getContext("2d");
 
     const chart = new Chart(ctx, {
       type: "line",
       data: {
-        labels: labels,
         datasets: [
           {
             label: "Live EMG",
@@ -122,31 +122,40 @@
           },
           {
             label: "Calibration Peak",
-            data: calPeakData,
+            data: [],
             borderWidth: 2,
             pointRadius: 0,
-            tension: 0.25
+            borderDash: [8, 6]
           },
           {
             label: "Current Peak",
-            data: currentPeakData,
+            data: [],
             borderWidth: 2,
             pointRadius: 0,
-            tension: 0.25
+            borderDash: [8, 6]
           }
         ]
       },
       options: {
         responsive: true,
         animation: false,
+        parsing: false,
         scales: {
+          x: {
+            type: "linear",
+            min: 0,
+            max: liveWindowSeconds,
+            title: {
+              display: true,
+              text: "Time, seconds"
+            }
+          },
           y: {
             beginAtZero: true,
-            suggestedMax: 1023
-          },
-          x: {
-            ticks: {
-              display: false
+            suggestedMax: 1023,
+            title: {
+              display: true,
+              text: "EMG Signal"
             }
           }
         }
@@ -210,18 +219,17 @@
 
         if (!isNaN(emg)) {
           document.getElementById("liveEMG").innerText = emg.toFixed(0);
-          addPoint(emg, null, null);
+          updateLiveChart(emg);
         }
       }
 
       if (type === "CAL") {
-        const repPeak = parseFloat(parts[1]);
         const avgCalPeak = parseFloat(parts[2]);
-        const repCount = parseInt(parts[3]);
 
         if (!isNaN(avgCalPeak)) {
-          document.getElementById("calPeak").innerText = avgCalPeak.toFixed(0);
-          addPoint(null, avgCalPeak, null);
+          latestCalPeak = avgCalPeak;
+          document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
+          refreshReferenceLines();
         }
       }
 
@@ -231,36 +239,63 @@
         const percent = parseFloat(parts[3]);
 
         if (!isNaN(currentPeak)) {
-          document.getElementById("currentPeak").innerText = currentPeak.toFixed(0);
+          latestCurrentPeak = currentPeak;
+          document.getElementById("currentPeak").innerText = latestCurrentPeak.toFixed(0);
         }
 
         if (!isNaN(calPeak)) {
-          document.getElementById("calPeak").innerText = calPeak.toFixed(0);
+          latestCalPeak = calPeak;
+          document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
         }
 
         if (!isNaN(percent)) {
           document.getElementById("matchPercent").innerText = percent.toFixed(0);
         }
 
-        addPoint(null, calPeak, currentPeak);
+        refreshReferenceLines();
       }
     }
 
-    function addPoint(emg, calPeak, currentPeak) {
-      labels.push("");
+    function updateLiveChart(emg) {
+      const now = performance.now();
 
-      emgData.push(emg);
-      calPeakData.push(calPeak);
-      currentPeakData.push(currentPeak);
-
-      if (labels.length > maxPoints) {
-        labels.shift();
-        emgData.shift();
-        calPeakData.shift();
-        currentPeakData.shift();
+      if (startTime === null) {
+        startTime = now;
       }
 
+      const elapsedSec = (now - startTime) / 1000;
+
+      emgData.push({
+        x: elapsedSec,
+        y: emg
+      });
+
+      emgData = emgData.filter(point => elapsedSec - point.x <= liveWindowSeconds);
+
+      chart.data.datasets[0].data = emgData;
+
+      refreshReferenceLines();
+
+      chart.options.scales.x.min = Math.max(0, elapsedSec - liveWindowSeconds);
+      chart.options.scales.x.max = Math.max(liveWindowSeconds, elapsedSec);
+
       chart.update();
+    }
+
+    function refreshReferenceLines() {
+      if (emgData.length === 0) {
+        return;
+      }
+
+      chart.data.datasets[1].data = emgData.map(point => ({
+        x: point.x,
+        y: latestCalPeak
+      }));
+
+      chart.data.datasets[2].data = emgData.map(point => ({
+        x: point.x,
+        y: latestCurrentPeak
+      }));
     }
   </script>
 
