@@ -3,432 +3,410 @@
 <head>
   <title>EMG Live Monitor</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 30px;
-      background: #f5f5f5;
-    }
-
-    .card {
-      background: white;
-      padding: 20px;
-      border-radius: 16px;
-      margin-bottom: 20px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-
-    button {
-      padding: 10px 18px;
-      font-size: 16px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-right: 8px;
-      margin-top: 8px;
-    }
-
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 15px;
-      margin-top: 20px;
-    }
-
-    .stat {
-      background: #f0f3f7;
-      padding: 15px;
-      border-radius: 12px;
-      text-align: center;
-    }
-
-    .stat h3 {
-      margin: 0;
-      font-size: 14px;
-      color: #555;
-    }
-
-    .stat p {
-      margin: 8px 0 0;
-      font-size: 28px;
-      font-weight: bold;
-    }
-
-    canvas {
-      width: 100% !important;
-      height: 420px !important;
-    }
+    body { font-family: Arial, sans-serif; padding: 30px; background: #f5f5f5; }
+    .card { background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    button { padding: 10px 18px; font-size: 16px; border-radius: 8px; cursor: pointer; margin-right: 8px; margin-top: 8px; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 20px; }
+    .stat { background: #f0f3f7; padding: 15px; border-radius: 12px; text-align: center; }
+    .stat h3 { margin: 0; font-size: 14px; color: #555; }
+    .stat p { margin: 8px 0 0; font-size: 28px; font-weight: bold; }
+    canvas { width: 100% !important; height: 420px !important; }
   </style>
 </head>
 
 <body>
 
-  <div class="card">
-    <h1>EMG Live Monitor</h1>
-    <button id="connect">Connect Arduino</button>
-    <button id="exportRaw">Export Raw EMG</button>
-    <button id="exportCal">Export Calibration Peaks</button>
-    <button id="exportCurrent">Export Current Peaks</button>
-    <button id="exportAll">Export All Data</button>
-    <p id="status">Not connected</p>
-  </div>
+<div class="card">
+  <h1>EMG Live Monitor</h1>
+  <button id="connect">Connect Arduino</button>
+  <button id="exportRaw">Export Raw EMG</button>
+  <button id="exportCal">Export Calibration Peaks</button>
+  <button id="exportCurrent">Export Current Peaks</button>
+  <button id="exportAll">Export All Data</button>
+  <button id="exportLiveChart">Export Live Chart</button>
+  <button id="exportProgressChart">Export Progress Chart</button>
+  <button id="exportMatchChart">Export Match Chart</button>
+  <p id="status">Not connected</p>
+</div>
 
-  <div class="card stats">
-    <div class="stat">
-      <h3>Live EMG</h3>
-      <p id="liveEMG">0</p>
-    </div>
+<div class="card stats">
+  <div class="stat"><h3>Live EMG</h3><p id="liveEMG">0</p></div>
+  <div class="stat"><h3>Calibration Peak</h3><p id="calPeak">0</p></div>
+  <div class="stat"><h3>Current Peak</h3><p id="currentPeak">0</p></div>
+  <div class="stat"><h3>Match</h3><p><span id="matchPercent">0</span>%</p></div>
+</div>
 
-    <div class="stat">
-      <h3>Calibration Peak</h3>
-      <p id="calPeak">0</p>
-    </div>
+<div class="card">
+  <h2>Live EMG Signal</h2>
+  <canvas id="emgChart"></canvas>
+</div>
 
-    <div class="stat">
-      <h3>Current Peak</h3>
-      <p id="currentPeak">0</p>
-    </div>
+<div class="card">
+  <h2>Rep Peak Progress</h2>
+  <canvas id="progressChart"></canvas>
+</div>
 
-    <div class="stat">
-      <h3>Match</h3>
-      <p><span id="matchPercent">0</span>%</p>
-    </div>
-  </div>
+<div class="card">
+  <h2>Match Percentage Progress</h2>
+  <canvas id="matchChart"></canvas>
+</div>
 
-  <div class="card">
-    <h2>Live EMG Signal</h2>
-    <canvas id="emgChart"></canvas>
-  </div>
+<div class="card">
+  <h2>Progress Analysis</h2>
+  <p id="analysisText">No comparison data yet.</p>
+</div>
 
-  <script>
-    let port;
-    let reader;
-    let buffer = "";
+<script>
+let port, reader, buffer = "";
+let startTime = null;
+const liveWindowSeconds = 30;
 
-    let startTime = null;
-    const liveWindowSeconds = 30;
+let latestCalPeak = 0;
+let latestCurrentPeak = 0;
+let currentRepCount = 0;
 
-    let latestCalPeak = 0;
-    let latestCurrentPeak = 0;
-    let currentRepCount = 0;
+let emgData = [];
+let rawExportData = [];
+let calibrationExportData = [];
+let currentExportData = [];
 
-    let emgData = [];
+let repLabels = [];
+let repCalPeaks = [];
+let repCurrentPeaks = [];
+let repMatchPercents = [];
 
-    let rawExportData = [];
-    let calibrationExportData = [];
-    let currentExportData = [];
+const liveCtx = document.getElementById("emgChart").getContext("2d");
+const progressCtx = document.getElementById("progressChart").getContext("2d");
+const matchCtx = document.getElementById("matchChart").getContext("2d");
 
-    const ctx = document.getElementById("emgChart").getContext("2d");
+const chart = new Chart(liveCtx, {
+  type: "line",
+  data: {
+    datasets: [
+      { label: "Live EMG", data: emgData, borderWidth: 2, pointRadius: 0, tension: 0.25 },
+      { label: "Calibration Peak", data: [], borderWidth: 2, pointRadius: 0, borderDash: [8, 6] },
+      { label: "Current Peak", data: [], borderWidth: 2, pointRadius: 0, borderDash: [8, 6] }
+    ]
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    parsing: false,
+    scales: {
+      x: { type: "linear", min: 0, max: liveWindowSeconds, title: { display: true, text: "Time, seconds" } },
+      y: { beginAtZero: true, suggestedMax: 1023, title: { display: true, text: "EMG Signal" } }
+    }
+  }
+});
 
-    const chart = new Chart(ctx, {
-      type: "line",
-      data: {
-        datasets: [
-          {
-            label: "Live EMG",
-            data: emgData,
-            borderWidth: 2,
-            pointRadius: 0,
-            tension: 0.25
-          },
-          {
-            label: "Calibration Peak",
-            data: [],
-            borderWidth: 2,
-            pointRadius: 0,
-            borderDash: [8, 6]
-          },
-          {
-            label: "Current Peak",
-            data: [],
-            borderWidth: 2,
-            pointRadius: 0,
-            borderDash: [8, 6]
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        animation: false,
-        parsing: false,
-        scales: {
-          x: {
-            type: "linear",
-            min: 0,
-            max: liveWindowSeconds,
-            title: {
-              display: true,
-              text: "Time, seconds"
-            }
-          },
-          y: {
-            beginAtZero: true,
-            suggestedMax: 1023,
-            title: {
-              display: true,
-              text: "EMG Signal"
-            }
-          }
-        }
-      }
-    });
+const progressChart = new Chart(progressCtx, {
+  type: "bar",
+  data: {
+    labels: repLabels,
+    datasets: [
+      { label: "Calibration Peak", data: repCalPeaks },
+      { label: "Current Peak", data: repCurrentPeaks }
+    ]
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    scales: {
+      y: { beginAtZero: true, suggestedMax: 1023, title: { display: true, text: "EMG Peak" } }
+    }
+  }
+});
 
-    document.getElementById("connect").onclick = async function () {
-      try {
-        if (!("serial" in navigator)) {
-          alert("Web Serial is not supported. Use Chrome or Edge.");
-          return;
-        }
+const matchChart = new Chart(matchCtx, {
+  type: "bar",
+  data: {
+    labels: repLabels,
+    datasets: [
+      { label: "Match Percentage", data: repMatchPercents }
+    ]
+  },
+  options: {
+    responsive: true,
+    animation: false,
+    scales: {
+      y: { beginAtZero: true, suggestedMax: 120, title: { display: true, text: "Match %" } }
+    }
+  }
+});
 
-        port = await navigator.serial.requestPort();
-        await port.open({ baudRate: 9600 });
-
-        document.getElementById("status").innerText = "Connected";
-
-        const decoder = new TextDecoderStream();
-        port.readable.pipeTo(decoder.writable);
-        reader = decoder.readable.getReader();
-
-        readSerial();
-
-      } catch (error) {
-        console.error(error);
-        alert("Connection failed: " + error);
-      }
-    };
-
-    async function readSerial() {
-      while (true) {
-        const { value, done } = await reader.read();
-
-        if (done) {
-          break;
-        }
-
-        if (value) {
-          buffer += value;
-          const lines = buffer.split("\n");
-          buffer = lines.pop();
-
-          for (let line of lines) {
-            processLine(line.trim());
-          }
-        }
-      }
+document.getElementById("connect").onclick = async function () {
+  try {
+    if (!("serial" in navigator)) {
+      alert("Web Serial is not supported. Use Chrome or Edge.");
+      return;
     }
 
-    function getElapsedSec() {
-      const now = performance.now();
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 9600 });
+    document.getElementById("status").innerText = "Connected";
 
-      if (startTime === null) {
-        startTime = now;
-      }
+    const decoder = new TextDecoderStream();
+    port.readable.pipeTo(decoder.writable);
+    reader = decoder.readable.getReader();
 
-      return (now - startTime) / 1000;
-    }
+    readSerial();
+  } catch (error) {
+    console.error(error);
+    alert("Connection failed: " + error);
+  }
+};
 
-    function processLine(line) {
-      if (line.length === 0) {
-        return;
-      }
+async function readSerial() {
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
 
-      const parts = line.split(",");
-      const type = parts[0];
-      const elapsedSec = getElapsedSec();
+    if (value) {
+      buffer += value;
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
 
-      if (type === "EMG") {
-        const emg = parseFloat(parts[1]);
-
-        if (!isNaN(emg)) {
-          document.getElementById("liveEMG").innerText = emg.toFixed(0);
-
-          rawExportData.push({
-            time: elapsedSec.toFixed(3),
-            emg: emg.toFixed(0)
-          });
-
-          updateLiveChart(emg, elapsedSec);
-        }
-      }
-
-      if (type === "CAL") {
-        const repPeak = parseFloat(parts[1]);
-        const avgCalPeak = parseFloat(parts[2]);
-        const repCount = parseInt(parts[3]);
-
-        if (!isNaN(avgCalPeak)) {
-          latestCalPeak = avgCalPeak;
-          document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
-
-          calibrationExportData.push({
-            time: elapsedSec.toFixed(3),
-            rep: repCount,
-            repPeak: repPeak.toFixed(0),
-            averageCalPeak: avgCalPeak.toFixed(0)
-          });
-
-          refreshReferenceLines();
-          chart.update();
-        }
-      }
-
-      if (type === "RESULT") {
-        const currentPeak = parseFloat(parts[1]);
-        const calPeak = parseFloat(parts[2]);
-        const percent = parseFloat(parts[3]);
-
-        currentRepCount++;
-
-        if (!isNaN(currentPeak)) {
-          latestCurrentPeak = currentPeak;
-          document.getElementById("currentPeak").innerText = latestCurrentPeak.toFixed(0);
-        }
-
-        if (!isNaN(calPeak)) {
-          latestCalPeak = calPeak;
-          document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
-        }
-
-        if (!isNaN(percent)) {
-          document.getElementById("matchPercent").innerText = percent.toFixed(0);
-        }
-
-        currentExportData.push({
-          time: elapsedSec.toFixed(3),
-          rep: currentRepCount,
-          currentPeak: currentPeak.toFixed(0),
-          calibrationPeak: calPeak.toFixed(0),
-          matchPercent: percent.toFixed(0)
-        });
-
-        refreshReferenceLines();
-        chart.update();
+      for (let line of lines) {
+        processLine(line.trim());
       }
     }
+  }
+}
 
-    function updateLiveChart(emg, elapsedSec) {
-      emgData.push({
-        x: elapsedSec,
-        y: emg
+function getElapsedSec() {
+  const now = performance.now();
+  if (startTime === null) startTime = now;
+  return (now - startTime) / 1000;
+}
+
+function processLine(line) {
+  if (line.length === 0) return;
+
+  const parts = line.split(",");
+  const type = parts[0];
+  const elapsedSec = getElapsedSec();
+
+  if (type === "EMG") {
+    const emg = parseFloat(parts[1]);
+
+    if (!isNaN(emg)) {
+      document.getElementById("liveEMG").innerText = emg.toFixed(0);
+
+      rawExportData.push({
+        time: elapsedSec.toFixed(3),
+        emg: emg.toFixed(0)
       });
 
-      emgData = emgData.filter(point => elapsedSec - point.x <= liveWindowSeconds);
+      updateLiveChart(emg, elapsedSec);
+    }
+  }
 
-      chart.data.datasets[0].data = emgData;
+  if (type === "CAL") {
+    const repPeak = parseFloat(parts[1]);
+    const avgCalPeak = parseFloat(parts[2]);
+    const repCount = parseInt(parts[3]);
+
+    if (!isNaN(avgCalPeak)) {
+      latestCalPeak = avgCalPeak;
+      document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
+
+      calibrationExportData.push({
+        time: elapsedSec.toFixed(3),
+        rep: repCount,
+        repPeak: repPeak.toFixed(0),
+        averageCalPeak: avgCalPeak.toFixed(0)
+      });
 
       refreshReferenceLines();
-
-      chart.options.scales.x.min = Math.max(0, elapsedSec - liveWindowSeconds);
-      chart.options.scales.x.max = Math.max(liveWindowSeconds, elapsedSec);
-
       chart.update();
     }
+  }
 
-    function refreshReferenceLines() {
-      if (emgData.length === 0) {
-        return;
-      }
+  if (type === "RESULT") {
+    const currentPeak = parseFloat(parts[1]);
+    const calPeak = parseFloat(parts[2]);
+    const percent = parseFloat(parts[3]);
 
-      chart.data.datasets[1].data = emgData.map(point => ({
-        x: point.x,
-        y: latestCalPeak
-      }));
+    currentRepCount++;
 
-      chart.data.datasets[2].data = emgData.map(point => ({
-        x: point.x,
-        y: latestCurrentPeak
-      }));
+    if (!isNaN(currentPeak)) {
+      latestCurrentPeak = currentPeak;
+      document.getElementById("currentPeak").innerText = latestCurrentPeak.toFixed(0);
     }
 
-    function downloadCSV(filename, rows) {
-      if (rows.length === 0) {
-        alert("No data to export yet.");
-        return;
-      }
-
-      const headers = Object.keys(rows[0]);
-      const csvRows = [];
-
-      csvRows.push(headers.join(","));
-
-      for (const row of rows) {
-        csvRows.push(headers.map(header => row[header]).join(","));
-      }
-
-      const csvContent = csvRows.join("\n");
-      const blob = new Blob([csvContent], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      a.click();
-
-      URL.revokeObjectURL(url);
+    if (!isNaN(calPeak)) {
+      latestCalPeak = calPeak;
+      document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
     }
 
-    document.getElementById("exportRaw").onclick = function () {
-      downloadCSV("raw_emg_data.csv", rawExportData);
-    };
+    if (!isNaN(percent)) {
+      document.getElementById("matchPercent").innerText = percent.toFixed(0);
+    }
 
-    document.getElementById("exportCal").onclick = function () {
-      downloadCSV("calibration_peaks.csv", calibrationExportData);
-    };
+    currentExportData.push({
+      time: elapsedSec.toFixed(3),
+      rep: currentRepCount,
+      currentPeak: currentPeak.toFixed(0),
+      calibrationPeak: calPeak.toFixed(0),
+      matchPercent: percent.toFixed(0)
+    });
 
-    document.getElementById("exportCurrent").onclick = function () {
-      downloadCSV("current_measurement_peaks.csv", currentExportData);
-    };
+    repLabels.push("Rep " + currentRepCount);
+    repCalPeaks.push(calPeak);
+    repCurrentPeaks.push(currentPeak);
+    repMatchPercents.push(percent);
 
-    document.getElementById("exportAll").onclick = function () {
-      const allRows = [];
+    updateProgressCharts();
+    updateAnalysis();
 
-      rawExportData.forEach(row => {
-        allRows.push({
-          type: "RAW",
-          time: row.time,
-          emg: row.emg,
-          rep: "",
-          repPeak: "",
-          averageCalPeak: "",
-          currentPeak: "",
-          calibrationPeak: "",
-          matchPercent: ""
-        });
-      });
+    refreshReferenceLines();
+    chart.update();
+  }
+}
 
-      calibrationExportData.forEach(row => {
-        allRows.push({
-          type: "CALIBRATION",
-          time: row.time,
-          emg: "",
-          rep: row.rep,
-          repPeak: row.repPeak,
-          averageCalPeak: row.averageCalPeak,
-          currentPeak: "",
-          calibrationPeak: "",
-          matchPercent: ""
-        });
-      });
+function updateLiveChart(emg, elapsedSec) {
+  emgData.push({ x: elapsedSec, y: emg });
+  emgData = emgData.filter(point => elapsedSec - point.x <= liveWindowSeconds);
 
-      currentExportData.forEach(row => {
-        allRows.push({
-          type: "CURRENT",
-          time: row.time,
-          emg: "",
-          rep: row.rep,
-          repPeak: "",
-          averageCalPeak: "",
-          currentPeak: row.currentPeak,
-          calibrationPeak: row.calibrationPeak,
-          matchPercent: row.matchPercent
-        });
-      });
+  chart.data.datasets[0].data = emgData;
+  refreshReferenceLines();
 
-      allRows.sort((a, b) => parseFloat(a.time) - parseFloat(b.time));
+  chart.options.scales.x.min = Math.max(0, elapsedSec - liveWindowSeconds);
+  chart.options.scales.x.max = Math.max(liveWindowSeconds, elapsedSec);
 
-      downloadCSV("emg_full_session_data.csv", allRows);
-    };
-  </script>
+  chart.update();
+}
+
+function refreshReferenceLines() {
+  if (emgData.length === 0) return;
+
+  chart.data.datasets[1].data = emgData.map(point => ({ x: point.x, y: latestCalPeak }));
+  chart.data.datasets[2].data = emgData.map(point => ({ x: point.x, y: latestCurrentPeak }));
+}
+
+function updateProgressCharts() {
+  progressChart.update();
+  matchChart.update();
+}
+
+function updateAnalysis() {
+  if (repMatchPercents.length === 0) {
+    document.getElementById("analysisText").innerText = "No comparison data yet.";
+    return;
+  }
+
+  const avg = repMatchPercents.reduce((a, b) => a + b, 0) / repMatchPercents.length;
+  const best = Math.max(...repMatchPercents);
+  const lowest = Math.min(...repMatchPercents);
+
+  const bestRep = repMatchPercents.indexOf(best) + 1;
+  const lowestRep = repMatchPercents.indexOf(lowest) + 1;
+
+  let trend = "Performance is relatively stable.";
+  if (repMatchPercents.length >= 2) {
+    const first = repMatchPercents[0];
+    const last = repMatchPercents[repMatchPercents.length - 1];
+
+    if (last > first + 5) trend = "Performance increased across reps.";
+    else if (last < first - 5) trend = "Performance decreased across reps, which may suggest fatigue.";
+  }
+
+  document.getElementById("analysisText").innerText =
+    "Average Match: " + avg.toFixed(0) + "%. " +
+    "Best Rep: Rep " + bestRep + " at " + best.toFixed(0) + "%. " +
+    "Lowest Rep: Rep " + lowestRep + " at " + lowest.toFixed(0) + "%. " +
+    trend;
+}
+
+function downloadCSV(filename, rows) {
+  if (rows.length === 0) {
+    alert("No data to export yet.");
+    return;
+  }
+
+  const headers = Object.keys(rows[0]);
+  const csvRows = [headers.join(",")];
+
+  for (const row of rows) {
+    csvRows.push(headers.map(header => row[header]).join(","));
+  }
+
+  const blob = new Blob([csvRows.join("\n")], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+function downloadChart(chartObject, filename) {
+  const link = document.createElement("a");
+  link.href = chartObject.toBase64Image();
+  link.download = filename;
+  link.click();
+}
+
+document.getElementById("exportRaw").onclick = () => downloadCSV("raw_emg_data.csv", rawExportData);
+document.getElementById("exportCal").onclick = () => downloadCSV("calibration_peaks.csv", calibrationExportData);
+document.getElementById("exportCurrent").onclick = () => downloadCSV("current_measurement_peaks.csv", currentExportData);
+
+document.getElementById("exportAll").onclick = function () {
+  const allRows = [];
+
+  rawExportData.forEach(row => {
+    allRows.push({
+      type: "RAW",
+      time: row.time,
+      emg: row.emg,
+      rep: "",
+      repPeak: "",
+      averageCalPeak: "",
+      currentPeak: "",
+      calibrationPeak: "",
+      matchPercent: ""
+    });
+  });
+
+  calibrationExportData.forEach(row => {
+    allRows.push({
+      type: "CALIBRATION",
+      time: row.time,
+      emg: "",
+      rep: row.rep,
+      repPeak: row.repPeak,
+      averageCalPeak: row.averageCalPeak,
+      currentPeak: "",
+      calibrationPeak: "",
+      matchPercent: ""
+    });
+  });
+
+  currentExportData.forEach(row => {
+    allRows.push({
+      type: "CURRENT",
+      time: row.time,
+      emg: "",
+      rep: row.rep,
+      repPeak: "",
+      averageCalPeak: "",
+      currentPeak: row.currentPeak,
+      calibrationPeak: row.calibrationPeak,
+      matchPercent: row.matchPercent
+    });
+  });
+
+  allRows.sort((a, b) => parseFloat(a.time) - parseFloat(b.time));
+  downloadCSV("emg_full_session_data.csv", allRows);
+};
+
+document.getElementById("exportLiveChart").onclick = () => downloadChart(chart, "live_emg_chart.png");
+document.getElementById("exportProgressChart").onclick = () => downloadChart(progressChart, "rep_peak_progress_chart.png");
+document.getElementById("exportMatchChart").onclick = () => downloadChart(matchChart, "match_percentage_chart.png");
+</script>
 
 </body>
 </html>
