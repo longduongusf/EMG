@@ -24,6 +24,8 @@
       font-size: 16px;
       border-radius: 8px;
       cursor: pointer;
+      margin-right: 8px;
+      margin-top: 8px;
     }
 
     .stats {
@@ -64,6 +66,10 @@
   <div class="card">
     <h1>EMG Live Monitor</h1>
     <button id="connect">Connect Arduino</button>
+    <button id="exportRaw">Export Raw EMG</button>
+    <button id="exportCal">Export Calibration Peaks</button>
+    <button id="exportCurrent">Export Current Peaks</button>
+    <button id="exportAll">Export All Data</button>
     <p id="status">Not connected</p>
   </div>
 
@@ -100,12 +106,17 @@
     let buffer = "";
 
     let startTime = null;
-    const liveWindowSeconds = 5;
+    const liveWindowSeconds = 30;
 
     let latestCalPeak = 0;
     let latestCurrentPeak = 0;
+    let currentRepCount = 0;
 
     let emgData = [];
+
+    let rawExportData = [];
+    let calibrationExportData = [];
+    let currentExportData = [];
 
     const ctx = document.getElementById("emgChart").getContext("2d");
 
@@ -206,6 +217,16 @@
       }
     }
 
+    function getElapsedSec() {
+      const now = performance.now();
+
+      if (startTime === null) {
+        startTime = now;
+      }
+
+      return (now - startTime) / 1000;
+    }
+
     function processLine(line) {
       if (line.length === 0) {
         return;
@@ -213,23 +234,41 @@
 
       const parts = line.split(",");
       const type = parts[0];
+      const elapsedSec = getElapsedSec();
 
       if (type === "EMG") {
         const emg = parseFloat(parts[1]);
 
         if (!isNaN(emg)) {
           document.getElementById("liveEMG").innerText = emg.toFixed(0);
-          updateLiveChart(emg);
+
+          rawExportData.push({
+            time: elapsedSec.toFixed(3),
+            emg: emg.toFixed(0)
+          });
+
+          updateLiveChart(emg, elapsedSec);
         }
       }
 
       if (type === "CAL") {
+        const repPeak = parseFloat(parts[1]);
         const avgCalPeak = parseFloat(parts[2]);
+        const repCount = parseInt(parts[3]);
 
         if (!isNaN(avgCalPeak)) {
           latestCalPeak = avgCalPeak;
           document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
+
+          calibrationExportData.push({
+            time: elapsedSec.toFixed(3),
+            rep: repCount,
+            repPeak: repPeak.toFixed(0),
+            averageCalPeak: avgCalPeak.toFixed(0)
+          });
+
           refreshReferenceLines();
+          chart.update();
         }
       }
 
@@ -237,6 +276,8 @@
         const currentPeak = parseFloat(parts[1]);
         const calPeak = parseFloat(parts[2]);
         const percent = parseFloat(parts[3]);
+
+        currentRepCount++;
 
         if (!isNaN(currentPeak)) {
           latestCurrentPeak = currentPeak;
@@ -252,19 +293,20 @@
           document.getElementById("matchPercent").innerText = percent.toFixed(0);
         }
 
+        currentExportData.push({
+          time: elapsedSec.toFixed(3),
+          rep: currentRepCount,
+          currentPeak: currentPeak.toFixed(0),
+          calibrationPeak: calPeak.toFixed(0),
+          matchPercent: percent.toFixed(0)
+        });
+
         refreshReferenceLines();
+        chart.update();
       }
     }
 
-    function updateLiveChart(emg) {
-      const now = performance.now();
-
-      if (startTime === null) {
-        startTime = now;
-      }
-
-      const elapsedSec = (now - startTime) / 1000;
-
+    function updateLiveChart(emg, elapsedSec) {
       emgData.push({
         x: elapsedSec,
         y: emg
@@ -297,6 +339,95 @@
         y: latestCurrentPeak
       }));
     }
+
+    function downloadCSV(filename, rows) {
+      if (rows.length === 0) {
+        alert("No data to export yet.");
+        return;
+      }
+
+      const headers = Object.keys(rows[0]);
+      const csvRows = [];
+
+      csvRows.push(headers.join(","));
+
+      for (const row of rows) {
+        csvRows.push(headers.map(header => row[header]).join(","));
+      }
+
+      const csvContent = csvRows.join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById("exportRaw").onclick = function () {
+      downloadCSV("raw_emg_data.csv", rawExportData);
+    };
+
+    document.getElementById("exportCal").onclick = function () {
+      downloadCSV("calibration_peaks.csv", calibrationExportData);
+    };
+
+    document.getElementById("exportCurrent").onclick = function () {
+      downloadCSV("current_measurement_peaks.csv", currentExportData);
+    };
+
+    document.getElementById("exportAll").onclick = function () {
+      const allRows = [];
+
+      rawExportData.forEach(row => {
+        allRows.push({
+          type: "RAW",
+          time: row.time,
+          emg: row.emg,
+          rep: "",
+          repPeak: "",
+          averageCalPeak: "",
+          currentPeak: "",
+          calibrationPeak: "",
+          matchPercent: ""
+        });
+      });
+
+      calibrationExportData.forEach(row => {
+        allRows.push({
+          type: "CALIBRATION",
+          time: row.time,
+          emg: "",
+          rep: row.rep,
+          repPeak: row.repPeak,
+          averageCalPeak: row.averageCalPeak,
+          currentPeak: "",
+          calibrationPeak: "",
+          matchPercent: ""
+        });
+      });
+
+      currentExportData.forEach(row => {
+        allRows.push({
+          type: "CURRENT",
+          time: row.time,
+          emg: "",
+          rep: row.rep,
+          repPeak: "",
+          averageCalPeak: "",
+          currentPeak: row.currentPeak,
+          calibrationPeak: row.calibrationPeak,
+          matchPercent: row.matchPercent
+        });
+      });
+
+      allRows.sort((a, b) => parseFloat(a.time) - parseFloat(b.time));
+
+      downloadCSV("emg_full_session_data.csv", allRows);
+    };
   </script>
 
 </body>
