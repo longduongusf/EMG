@@ -9,6 +9,8 @@
       font-family: Arial, sans-serif;
       padding: 30px;
       background: #f5f5f5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     .card {
@@ -54,9 +56,15 @@
       font-weight: bold;
     }
 
+    .chartBox {
+      position: relative;
+      width: 100%;
+      height: 420px;
+    }
+
     canvas {
       width: 100% !important;
-      height: 420px !important;
+      height: 100% !important;
     }
   </style>
 </head>
@@ -85,17 +93,23 @@
 
 <div class="card">
   <h2>Live EMG Signal</h2>
-  <canvas id="emgChart"></canvas>
+  <div class="chartBox">
+    <canvas id="emgChart"></canvas>
+  </div>
 </div>
 
 <div class="card">
   <h2>Rep Peak Progress</h2>
-  <canvas id="progressChart"></canvas>
+  <div class="chartBox">
+    <canvas id="progressChart"></canvas>
+  </div>
 </div>
 
 <div class="card">
   <h2>Match Percentage Progress</h2>
-  <canvas id="matchChart"></canvas>
+  <div class="chartBox">
+    <canvas id="matchChart"></canvas>
+  </div>
 </div>
 
 <div class="card">
@@ -107,6 +121,7 @@
 let port, reader, buffer = "";
 let startTime = null;
 const liveWindowSeconds = 30;
+const sharpRatio = Math.max(window.devicePixelRatio || 1, 2);
 
 let latestCalPeak = 0;
 let latestCurrentPeak = 0;
@@ -126,6 +141,20 @@ const liveCtx = document.getElementById("emgChart").getContext("2d");
 const progressCtx = document.getElementById("progressChart").getContext("2d");
 const matchCtx = document.getElementById("matchChart").getContext("2d");
 
+const whiteBackgroundPlugin = {
+  id: "whiteBackgroundPlugin",
+  beforeDraw: function(chartInstance) {
+    const ctx = chartInstance.canvas.getContext("2d");
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, chartInstance.width, chartInstance.height);
+    ctx.restore();
+  }
+};
+
+Chart.register(whiteBackgroundPlugin);
+
 const chart = new Chart(liveCtx, {
   type: "line",
   data: {
@@ -135,7 +164,7 @@ const chart = new Chart(liveCtx, {
         data: emgData,
         borderColor: "#0077cc",
         backgroundColor: "rgba(0,119,204,0.15)",
-        borderWidth: 2,
+        borderWidth: 3,
         pointRadius: 0,
         tension: 0.25
       },
@@ -144,7 +173,7 @@ const chart = new Chart(liveCtx, {
         data: [],
         borderColor: "#d62828",
         backgroundColor: "rgba(214,40,40,0.20)",
-        borderWidth: 2,
+        borderWidth: 3,
         pointRadius: 0,
         borderDash: [8, 6]
       },
@@ -153,7 +182,7 @@ const chart = new Chart(liveCtx, {
         data: [],
         borderColor: "#f77f00",
         backgroundColor: "rgba(247,127,0,0.20)",
-        borderWidth: 2,
+        borderWidth: 3,
         pointRadius: 0,
         borderDash: [8, 6]
       }
@@ -161,6 +190,8 @@ const chart = new Chart(liveCtx, {
   },
   options: {
     responsive: true,
+    maintainAspectRatio: false,
+    devicePixelRatio: sharpRatio,
     animation: false,
     parsing: false,
     plugins: {
@@ -214,6 +245,8 @@ const progressChart = new Chart(progressCtx, {
   },
   options: {
     responsive: true,
+    maintainAspectRatio: false,
+    devicePixelRatio: sharpRatio,
     animation: false,
     plugins: {
       legend: {
@@ -255,6 +288,8 @@ const matchChart = new Chart(matchCtx, {
   },
   options: {
     responsive: true,
+    maintainAspectRatio: false,
+    devicePixelRatio: sharpRatio,
     animation: false,
     plugins: {
       legend: {
@@ -279,20 +314,6 @@ const matchChart = new Chart(matchCtx, {
     }
   }
 });
-
-const whiteBackgroundPlugin = {
-  id: "whiteBackgroundPlugin",
-  beforeDraw: function(chartInstance) {
-    const ctx = chartInstance.canvas.getContext("2d");
-    ctx.save();
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, chartInstance.width, chartInstance.height);
-    ctx.restore();
-  }
-};
-
-Chart.register(whiteBackgroundPlugin);
 
 document.getElementById("connect").onclick = async function () {
   try {
@@ -506,6 +527,7 @@ function downloadCSV(filename, rows) {
 }
 
 function downloadChart(chartObject, filename) {
+  chartObject.resize();
   chartObject.update();
 
   setTimeout(() => {
