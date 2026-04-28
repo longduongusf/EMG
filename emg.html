@@ -3,15 +3,61 @@
 <head>
   <title>EMG Live Monitor</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
-    body { font-family: Arial, sans-serif; padding: 30px; background: #f5f5f5; }
-    .card { background: white; padding: 20px; border-radius: 16px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-    button { padding: 10px 18px; font-size: 16px; border-radius: 8px; cursor: pointer; margin-right: 8px; margin-top: 8px; }
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-top: 20px; }
-    .stat { background: #f0f3f7; padding: 15px; border-radius: 12px; text-align: center; }
-    .stat h3 { margin: 0; font-size: 14px; color: #555; }
-    .stat p { margin: 8px 0 0; font-size: 28px; font-weight: bold; }
-    canvas { width: 100% !important; height: 420px !important; }
+    body {
+      font-family: Arial, sans-serif;
+      padding: 30px;
+      background: #f5f5f5;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    button {
+      padding: 10px 18px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-top: 8px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .stat {
+      background: #f0f3f7;
+      padding: 15px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .stat h3 {
+      margin: 0;
+      font-size: 14px;
+      color: #555;
+    }
+
+    .stat p {
+      margin: 8px 0 0;
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 420px !important;
+    }
   </style>
 </head>
 
@@ -84,18 +130,63 @@ const chart = new Chart(liveCtx, {
   type: "line",
   data: {
     datasets: [
-      { label: "Live EMG", data: emgData, borderWidth: 2, pointRadius: 0, tension: 0.25 },
-      { label: "Calibration Peak", data: [], borderWidth: 2, pointRadius: 0, borderDash: [8, 6] },
-      { label: "Current Peak", data: [], borderWidth: 2, pointRadius: 0, borderDash: [8, 6] }
+      {
+        label: "Live EMG",
+        data: emgData,
+        borderColor: "#0077cc",
+        backgroundColor: "rgba(0,119,204,0.15)",
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.25
+      },
+      {
+        label: "Calibration Peak",
+        data: [],
+        borderColor: "#d62828",
+        backgroundColor: "rgba(214,40,40,0.20)",
+        borderWidth: 2,
+        pointRadius: 0,
+        borderDash: [8, 6]
+      },
+      {
+        label: "Current Peak",
+        data: [],
+        borderColor: "#f77f00",
+        backgroundColor: "rgba(247,127,0,0.20)",
+        borderWidth: 2,
+        pointRadius: 0,
+        borderDash: [8, 6]
+      }
     ]
   },
   options: {
     responsive: true,
     animation: false,
     parsing: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: "#111111",
+          font: { size: 14, weight: "bold" }
+        }
+      }
+    },
     scales: {
-      x: { type: "linear", min: 0, max: liveWindowSeconds, title: { display: true, text: "Time, seconds" } },
-      y: { beginAtZero: true, suggestedMax: 1023, title: { display: true, text: "EMG Signal" } }
+      x: {
+        type: "linear",
+        min: 0,
+        max: liveWindowSeconds,
+        title: { display: true, text: "Time, seconds", color: "#111111" },
+        ticks: { color: "#111111" },
+        grid: { color: "rgba(0,0,0,0.10)" }
+      },
+      y: {
+        beginAtZero: true,
+        suggestedMax: 1023,
+        title: { display: true, text: "EMG Signal", color: "#111111" },
+        ticks: { color: "#111111" },
+        grid: { color: "rgba(0,0,0,0.10)" }
+      }
     }
   }
 });
@@ -105,15 +196,45 @@ const progressChart = new Chart(progressCtx, {
   data: {
     labels: repLabels,
     datasets: [
-      { label: "Calibration Peak", data: repCalPeaks },
-      { label: "Current Peak", data: repCurrentPeaks }
+      {
+        label: "Calibration Peak",
+        data: repCalPeaks,
+        backgroundColor: "rgba(214,40,40,0.65)",
+        borderColor: "#d62828",
+        borderWidth: 1
+      },
+      {
+        label: "Current Peak",
+        data: repCurrentPeaks,
+        backgroundColor: "rgba(247,127,0,0.65)",
+        borderColor: "#f77f00",
+        borderWidth: 1
+      }
     ]
   },
   options: {
     responsive: true,
     animation: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: "#111111",
+          font: { size: 14, weight: "bold" }
+        }
+      }
+    },
     scales: {
-      y: { beginAtZero: true, suggestedMax: 1023, title: { display: true, text: "EMG Peak" } }
+      x: {
+        ticks: { color: "#111111" },
+        grid: { color: "rgba(0,0,0,0.10)" }
+      },
+      y: {
+        beginAtZero: true,
+        suggestedMax: 1023,
+        title: { display: true, text: "EMG Peak", color: "#111111" },
+        ticks: { color: "#111111" },
+        grid: { color: "rgba(0,0,0,0.10)" }
+      }
     }
   }
 });
@@ -123,17 +244,55 @@ const matchChart = new Chart(matchCtx, {
   data: {
     labels: repLabels,
     datasets: [
-      { label: "Match Percentage", data: repMatchPercents }
+      {
+        label: "Match Percentage",
+        data: repMatchPercents,
+        backgroundColor: "rgba(0,119,204,0.65)",
+        borderColor: "#0077cc",
+        borderWidth: 1
+      }
     ]
   },
   options: {
     responsive: true,
     animation: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: "#111111",
+          font: { size: 14, weight: "bold" }
+        }
+      }
+    },
     scales: {
-      y: { beginAtZero: true, suggestedMax: 120, title: { display: true, text: "Match %" } }
+      x: {
+        ticks: { color: "#111111" },
+        grid: { color: "rgba(0,0,0,0.10)" }
+      },
+      y: {
+        beginAtZero: true,
+        suggestedMax: 120,
+        title: { display: true, text: "Match %", color: "#111111" },
+        ticks: { color: "#111111" },
+        grid: { color: "rgba(0,0,0,0.10)" }
+      }
     }
   }
 });
+
+const whiteBackgroundPlugin = {
+  id: "whiteBackgroundPlugin",
+  beforeDraw: function(chartInstance) {
+    const ctx = chartInstance.canvas.getContext("2d");
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, chartInstance.width, chartInstance.height);
+    ctx.restore();
+  }
+};
+
+Chart.register(whiteBackgroundPlugin);
 
 document.getElementById("connect").onclick = async function () {
   try {
@@ -308,8 +467,11 @@ function updateAnalysis() {
     const first = repMatchPercents[0];
     const last = repMatchPercents[repMatchPercents.length - 1];
 
-    if (last > first + 5) trend = "Performance increased across reps.";
-    else if (last < first - 5) trend = "Performance decreased across reps, which may suggest fatigue.";
+    if (last > first + 5) {
+      trend = "Performance increased across reps.";
+    } else if (last < first - 5) {
+      trend = "Performance decreased across reps, which may suggest fatigue.";
+    }
   }
 
   document.getElementById("analysisText").innerText =
@@ -344,10 +506,14 @@ function downloadCSV(filename, rows) {
 }
 
 function downloadChart(chartObject, filename) {
-  const link = document.createElement("a");
-  link.href = chartObject.toBase64Image();
-  link.download = filename;
-  link.click();
+  chartObject.update();
+
+  setTimeout(() => {
+    const link = document.createElement("a");
+    link.href = chartObject.toBase64Image("image/png", 1);
+    link.download = filename;
+    link.click();
+  }, 100);
 }
 
 document.getElementById("exportRaw").onclick = () => downloadCSV("raw_emg_data.csv", rawExportData);
