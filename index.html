@@ -85,21 +85,21 @@
 </div>
 
 <div class="card stats">
-  <div class="stat"><h3>Live EMG</h3><p id="liveEMG">0</p></div>
-  <div class="stat"><h3>Calibration Peak</h3><p id="calPeak">0</p></div>
-  <div class="stat"><h3>Current Peak</h3><p id="currentPeak">0</p></div>
+  <div class="stat"><h3>Live EMG, V</h3><p id="liveEMG">0</p></div>
+  <div class="stat"><h3>Calibration Peak, V</h3><p id="calPeak">0</p></div>
+  <div class="stat"><h3>Current Peak, V</h3><p id="currentPeak">0</p></div>
   <div class="stat"><h3>Match</h3><p><span id="matchPercent">0</span>%</p></div>
 </div>
 
 <div class="card">
-  <h2>Live EMG Signal</h2>
+  <h2>Live EMG Voltage Signal</h2>
   <div class="chartBox">
     <canvas id="emgChart"></canvas>
   </div>
 </div>
 
 <div class="card">
-  <h2>Rep Peak Progress</h2>
+  <h2>Rep Peak Voltage Progress</h2>
   <div class="chartBox">
     <canvas id="progressChart"></canvas>
   </div>
@@ -160,7 +160,7 @@ const chart = new Chart(liveCtx, {
   data: {
     datasets: [
       {
-        label: "Live EMG",
+        label: "Live EMG, V",
         data: emgData,
         borderColor: "#0077cc",
         backgroundColor: "rgba(0,119,204,0.15)",
@@ -169,7 +169,7 @@ const chart = new Chart(liveCtx, {
         tension: 0.25
       },
       {
-        label: "Calibration Peak",
+        label: "Calibration Peak, V",
         data: [],
         borderColor: "#d62828",
         backgroundColor: "rgba(214,40,40,0.20)",
@@ -178,7 +178,7 @@ const chart = new Chart(liveCtx, {
         borderDash: [8, 6]
       },
       {
-        label: "Current Peak",
+        label: "Current Peak, V",
         data: [],
         borderColor: "#f77f00",
         backgroundColor: "rgba(247,127,0,0.20)",
@@ -213,9 +213,13 @@ const chart = new Chart(liveCtx, {
       },
       y: {
         beginAtZero: true,
-        suggestedMax: 1023,
-        title: { display: true, text: "EMG Signal", color: "#111111" },
-        ticks: { color: "#111111" },
+        min: 0,
+        max: 5,
+        title: { display: true, text: "EMG Voltage, V", color: "#111111" },
+        ticks: {
+          color: "#111111",
+          stepSize: 0.5
+        },
         grid: { color: "rgba(0,0,0,0.10)" }
       }
     }
@@ -228,14 +232,14 @@ const progressChart = new Chart(progressCtx, {
     labels: repLabels,
     datasets: [
       {
-        label: "Calibration Peak",
+        label: "Calibration Peak, V",
         data: repCalPeaks,
         backgroundColor: "rgba(214,40,40,0.65)",
         borderColor: "#d62828",
         borderWidth: 1
       },
       {
-        label: "Current Peak",
+        label: "Current Peak, V",
         data: repCurrentPeaks,
         backgroundColor: "rgba(247,127,0,0.65)",
         borderColor: "#f77f00",
@@ -263,9 +267,13 @@ const progressChart = new Chart(progressCtx, {
       },
       y: {
         beginAtZero: true,
-        suggestedMax: 1023,
-        title: { display: true, text: "EMG Peak", color: "#111111" },
-        ticks: { color: "#111111" },
+        min: 0,
+        max: 5,
+        title: { display: true, text: "EMG Peak, V", color: "#111111" },
+        ticks: {
+          color: "#111111",
+          stepSize: 0.5
+        },
         grid: { color: "rgba(0,0,0,0.10)" }
       }
     }
@@ -371,11 +379,11 @@ function processLine(line) {
     const emg = parseFloat(parts[1]);
 
     if (!isNaN(emg)) {
-      document.getElementById("liveEMG").innerText = emg.toFixed(0);
+      document.getElementById("liveEMG").innerText = emg.toFixed(3);
 
       rawExportData.push({
         time: elapsedSec.toFixed(3),
-        emg: emg.toFixed(0)
+        emgVoltage: emg.toFixed(3)
       });
 
       updateLiveChart(emg, elapsedSec);
@@ -389,13 +397,13 @@ function processLine(line) {
 
     if (!isNaN(avgCalPeak)) {
       latestCalPeak = avgCalPeak;
-      document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
+      document.getElementById("calPeak").innerText = latestCalPeak.toFixed(3);
 
       calibrationExportData.push({
         time: elapsedSec.toFixed(3),
         rep: repCount,
-        repPeak: repPeak.toFixed(0),
-        averageCalPeak: avgCalPeak.toFixed(0)
+        repPeakVoltage: repPeak.toFixed(3),
+        averageCalPeakVoltage: avgCalPeak.toFixed(3)
       });
 
       refreshReferenceLines();
@@ -412,12 +420,12 @@ function processLine(line) {
 
     if (!isNaN(currentPeak)) {
       latestCurrentPeak = currentPeak;
-      document.getElementById("currentPeak").innerText = latestCurrentPeak.toFixed(0);
+      document.getElementById("currentPeak").innerText = latestCurrentPeak.toFixed(3);
     }
 
     if (!isNaN(calPeak)) {
       latestCalPeak = calPeak;
-      document.getElementById("calPeak").innerText = latestCalPeak.toFixed(0);
+      document.getElementById("calPeak").innerText = latestCalPeak.toFixed(3);
     }
 
     if (!isNaN(percent)) {
@@ -427,8 +435,8 @@ function processLine(line) {
     currentExportData.push({
       time: elapsedSec.toFixed(3),
       rep: currentRepCount,
-      currentPeak: currentPeak.toFixed(0),
-      calibrationPeak: calPeak.toFixed(0),
+      currentPeakVoltage: currentPeak.toFixed(3),
+      calibrationPeakVoltage: calPeak.toFixed(3),
       matchPercent: percent.toFixed(0)
     });
 
@@ -538,9 +546,9 @@ function downloadChart(chartObject, filename) {
   }, 100);
 }
 
-document.getElementById("exportRaw").onclick = () => downloadCSV("raw_emg_data.csv", rawExportData);
-document.getElementById("exportCal").onclick = () => downloadCSV("calibration_peaks.csv", calibrationExportData);
-document.getElementById("exportCurrent").onclick = () => downloadCSV("current_measurement_peaks.csv", currentExportData);
+document.getElementById("exportRaw").onclick = () => downloadCSV("raw_emg_voltage_data.csv", rawExportData);
+document.getElementById("exportCal").onclick = () => downloadCSV("calibration_peak_voltage_data.csv", calibrationExportData);
+document.getElementById("exportCurrent").onclick = () => downloadCSV("current_measurement_peak_voltage_data.csv", currentExportData);
 
 document.getElementById("exportAll").onclick = function () {
   const allRows = [];
@@ -549,12 +557,12 @@ document.getElementById("exportAll").onclick = function () {
     allRows.push({
       type: "RAW",
       time: row.time,
-      emg: row.emg,
+      emgVoltage: row.emgVoltage,
       rep: "",
-      repPeak: "",
-      averageCalPeak: "",
-      currentPeak: "",
-      calibrationPeak: "",
+      repPeakVoltage: "",
+      averageCalPeakVoltage: "",
+      currentPeakVoltage: "",
+      calibrationPeakVoltage: "",
       matchPercent: ""
     });
   });
@@ -563,12 +571,12 @@ document.getElementById("exportAll").onclick = function () {
     allRows.push({
       type: "CALIBRATION",
       time: row.time,
-      emg: "",
+      emgVoltage: "",
       rep: row.rep,
-      repPeak: row.repPeak,
-      averageCalPeak: row.averageCalPeak,
-      currentPeak: "",
-      calibrationPeak: "",
+      repPeakVoltage: row.repPeakVoltage,
+      averageCalPeakVoltage: row.averageCalPeakVoltage,
+      currentPeakVoltage: "",
+      calibrationPeakVoltage: "",
       matchPercent: ""
     });
   });
@@ -577,22 +585,22 @@ document.getElementById("exportAll").onclick = function () {
     allRows.push({
       type: "CURRENT",
       time: row.time,
-      emg: "",
+      emgVoltage: "",
       rep: row.rep,
-      repPeak: "",
-      averageCalPeak: "",
-      currentPeak: row.currentPeak,
-      calibrationPeak: row.calibrationPeak,
+      repPeakVoltage: "",
+      averageCalPeakVoltage: "",
+      currentPeakVoltage: row.currentPeakVoltage,
+      calibrationPeakVoltage: row.calibrationPeakVoltage,
       matchPercent: row.matchPercent
     });
   });
 
   allRows.sort((a, b) => parseFloat(a.time) - parseFloat(b.time));
-  downloadCSV("emg_full_session_data.csv", allRows);
+  downloadCSV("emg_full_session_voltage_data.csv", allRows);
 };
 
-document.getElementById("exportLiveChart").onclick = () => downloadChart(chart, "live_emg_chart.png");
-document.getElementById("exportProgressChart").onclick = () => downloadChart(progressChart, "rep_peak_progress_chart.png");
+document.getElementById("exportLiveChart").onclick = () => downloadChart(chart, "live_emg_voltage_chart.png");
+document.getElementById("exportProgressChart").onclick = () => downloadChart(progressChart, "rep_peak_voltage_progress_chart.png");
 document.getElementById("exportMatchChart").onclick = () => downloadChart(matchChart, "match_percentage_chart.png");
 </script>
 
