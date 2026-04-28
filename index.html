@@ -81,6 +81,7 @@
   <button id="exportLiveChart">Export Live Chart</button>
   <button id="exportProgressChart">Export Progress Chart</button>
   <button id="exportMatchChart">Export Match Chart</button>
+  <button id="exportPercentLineChart">Export Percentage Plot</button>
   <p id="status">Not connected</p>
 </div>
 
@@ -113,6 +114,13 @@
 </div>
 
 <div class="card">
+  <h2>Percentage Comparison Plot</h2>
+  <div class="chartBox">
+    <canvas id="percentLineChart"></canvas>
+  </div>
+</div>
+
+<div class="card">
   <h2>Progress Analysis</h2>
   <p id="analysisText">No comparison data yet.</p>
 </div>
@@ -140,6 +148,7 @@ let repMatchPercents = [];
 const liveCtx = document.getElementById("emgChart").getContext("2d");
 const progressCtx = document.getElementById("progressChart").getContext("2d");
 const matchCtx = document.getElementById("matchChart").getContext("2d");
+const percentLineCtx = document.getElementById("percentLineChart").getContext("2d");
 
 const whiteBackgroundPlugin = {
   id: "whiteBackgroundPlugin",
@@ -314,7 +323,56 @@ const matchChart = new Chart(matchCtx, {
       },
       y: {
         beginAtZero: true,
-        suggestedMax: 120,
+        min: 0,
+        max: 120,
+        title: { display: true, text: "Match %", color: "#111111" },
+        ticks: { color: "#111111" },
+        grid: { color: "rgba(0,0,0,0.10)" }
+      }
+    }
+  }
+});
+
+const percentLineChart = new Chart(percentLineCtx, {
+  type: "line",
+  data: {
+    labels: repLabels,
+    datasets: [
+      {
+        label: "Match Percentage Trend",
+        data: repMatchPercents,
+        borderColor: "#2a9d8f",
+        backgroundColor: "rgba(42,157,143,0.18)",
+        borderWidth: 3,
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        tension: 0.25,
+        fill: true
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    devicePixelRatio: sharpRatio,
+    animation: false,
+    plugins: {
+      legend: {
+        labels: {
+          color: "#111111",
+          font: { size: 14, weight: "bold" }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: "#111111" },
+        grid: { color: "rgba(0,0,0,0.10)" }
+      },
+      y: {
+        beginAtZero: true,
+        min: 0,
+        max: 120,
         title: { display: true, text: "Match %", color: "#111111" },
         ticks: { color: "#111111" },
         grid: { color: "rgba(0,0,0,0.10)" }
@@ -476,6 +534,7 @@ function refreshReferenceLines() {
 function updateProgressCharts() {
   progressChart.update();
   matchChart.update();
+  percentLineChart.update();
 }
 
 function updateAnalysis() {
@@ -602,6 +661,7 @@ document.getElementById("exportAll").onclick = function () {
 document.getElementById("exportLiveChart").onclick = () => downloadChart(chart, "live_emg_voltage_chart.png");
 document.getElementById("exportProgressChart").onclick = () => downloadChart(progressChart, "rep_peak_voltage_progress_chart.png");
 document.getElementById("exportMatchChart").onclick = () => downloadChart(matchChart, "match_percentage_chart.png");
+document.getElementById("exportPercentLineChart").onclick = () => downloadChart(percentLineChart, "percentage_comparison_plot.png");
 </script>
 
 </body>
